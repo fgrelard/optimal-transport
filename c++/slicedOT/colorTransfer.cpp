@@ -37,9 +37,75 @@
 #include "stb_image.h"
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include "stb_image_write.h"
-
+#include <numeric>      // std::iota
+#include <algorithm>    // std::sort, std::stable_sort
 //Global flag to silent verbose messages
 bool silent;
+
+template <typename T>
+class Point3 {
+public:
+    T r;
+    T g;
+    T b;
+
+    Point3() : r(0), g(0), b(0) {}
+
+    Point3(T _r, T _g, T _b): r(_r), g(_g), b(_b) {
+    }
+
+    void normalize() {
+        T sum = std::sqrt(std::pow(r, 2) + std::pow(g, 2) + std::pow(b, 2));
+        r /= sum;
+        g /= sum;
+        b /= sum;
+    }
+
+    void divide(T factor) {
+        r /= factor;
+        g /= factor;
+        b /= factor;
+    }
+
+    void multiply(T factor) {
+        r *= factor;
+        g *= factor;
+        b *= factor;
+    }
+
+    Point3<T> orthProjection(const Point3<T>& other) {
+        T dot = r * other.r + b * other.b + g * other.g;
+        Point3<T> orthProj = other;
+        orthProj.multiply(dot);
+        return orthProj;
+    }
+
+    friend bool operator<(const Point3<T>& l, const Point3<T>& r);
+
+
+};
+
+bool operator<(const Point3<double>& l, const Point3<double>& r) {
+    return std::pow(l.r, 2) + std::pow(l.g,2) + std::pow(l.b, 2) <
+        std::pow(r.r, 2) + std::pow(r.g,2) + std::pow(r.b, 2);
+}
+
+template <typename T>
+std::vector<size_t> sort_indexes(const std::vector<T> &v) {
+
+  // initialize original index locations
+    std::vector<size_t> idx(v.size());
+  iota(idx.begin(), idx.end(), 0);
+
+  // sort indexes based on comparing values in v
+  // using std::stable_sort instead of std::sort
+  // to avoid unnecessary index re-orderings
+  // when v contains elements of equal values
+  stable_sort(idx.begin(), idx.end(),
+       [&v](size_t i1, size_t i2) {return v[i1] < v[i2];});
+
+  return idx;
+}
 
 
 int main(int argc, char **argv)
@@ -77,6 +143,46 @@ int main(int argc, char **argv)
    
   //Main computation
   std::vector<unsigned char> output(width*height*nbChannels);
+
+  typedef Point3<double> Point3f;
+  std::vector<Point3f> colorSource;
+  std::vector<Point3f> colorTarget;
+
+  for (auto i = 0; i < width; i++) {
+      for (auto j = 0; j < height; j++) {
+           auto ip = nbChannels*(width*j+i);
+           unsigned char r = source[ ip ];
+           unsigned char g = source[ ip + 1];
+           unsigned char b = source[ ip + 2];
+           colorSource.push_back(Point3f(r/255.0,g/255.0,b/255.0));
+           colorTarget.push_back(Point3f(target[ip]/255.0, target[ip+1]/255.0, target[ip+2]/255.0));
+      }
+  }
+
+   std::random_device rd;
+
+   // Mersenne twister PRNG, initialized with seed from previous random device instance
+   std::mt19937 gen(rd());
+
+   for (auto n = 0; n < nbSteps; n++) {
+       std::cout << "Iteration " << n << std::endl;
+       std::normal_distribution<float> d(0,1);
+
+       Point3f random_direction(d(gen),d(gen),d(gen));
+       random_direction.normalize();
+
+       std::vector<Point3f> projectionSources;
+       std::vector<Point3f> projectionTargets;
+
+       for (auto i = 0; i < colorSource.size(); i++) {
+           Point3f projection_s = colorSource[i].orthProjection(random_direction);
+           Point3f projection_t = colorTarget[i].orthProjection(random_direction);
+           projectionSources.push_back(projection_s);
+           projectionTargets.push_back(projection_t);
+           std::vector<size_t> indicesSources = sort_indexes(projectionSources);
+           std::vector<size_t> indicesTargets = sort_indexes(projectionTargets);
+       }
+   }
   
   //As an example, we just scan the pixels of the source image
   //and swap the color channels.
