@@ -19,3 +19,4 @@ All documents are still in *beta*, do not hesitate to send us any feedback.
 * [Discord channel](https://discord.gg/gyqXqQJ) of the project
 
 ![](banner.png)
+# optimal-transport
